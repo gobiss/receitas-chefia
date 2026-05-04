@@ -6,7 +6,22 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
 
-// Função de segurança para evitar que o inglês (apóstrofos) quebre os botões HTML
+// --- SISTEMA DE IDENTIFICAÇÃO ANÔNIMA (NOVO) ---
+// Gera ou recupera um ID único para o aparelho do usuário usando LocalStorage
+function getUserId() {
+    let id = localStorage.getItem('chefia_user_id');
+    if (!id) {
+        // Se não tem ID, cria um novo (ex: user_k3j4b5n6_170000000)
+        id = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        localStorage.setItem('chefia_user_id', id);
+    }
+    return id;
+}
+
+// Guarda o ID do celular atual nesta variável
+const MEU_USER_ID = getUserId();
+
+// Função de segurança para evitar que o inglês quebre botões
 const safeEncode = (str) => encodeURIComponent(str).replace(/'/g, "%27");
 
 async function init() {
@@ -27,10 +42,16 @@ supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'U
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
-// --- 2. CARREGAR E EXIBIR RECEITAS ---
+// --- 2. CARREGAR E EXIBIR RECEITAS (AGORA PRIVADAS) ---
 async function carregarSalvos() {
     try {
-        const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
+        // NOVO: Puxa APENAS as receitas que têm o user_id igual ao do celular atual
+        const { data } = await supabaseClient
+            .from('saved_recipes')
+            .select('*')
+            .eq('user_id', MEU_USER_ID) 
+            .order('created_at', { ascending: false });
+
         if (data) {
             listaSalvos.innerHTML = data.map(r => `
                 <div class="recipe-card" style="border: 1px solid #ddd; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -48,6 +69,11 @@ async function carregarSalvos() {
                     </div>
                 </div>
             `).join('');
+            
+            // Se o usuário não tiver nenhuma receita, mostra uma mensagem legal
+            if (data.length === 0) {
+                listaSalvos.innerHTML = `<p style="color: #fff; text-align: center; width: 100%; grid-column: 1 / -1;">Você ainda não salvou nenhuma receita. Que tal criar a primeira? 👨‍🍳</p>`;
+            }
         }
     } catch (err) {
         console.error("Erro ao carregar salvos:", err);
@@ -58,7 +84,7 @@ async function carregarSalvos() {
 window.deletarReceita = async function(id) {
     if(confirm("Tem certeza que deseja apagar esta receita da sua galeria?")) {
         try {
-            await supabaseClient.from('saved_recipes').delete().eq('id', id);
+            await supabaseClient.from('saved_recipes').delete().eq('id', id).eq('user_id', MEU_USER_ID);
             carregarSalvos(); 
         } catch (err) {
             alert("Erro ao apagar receita.");
@@ -94,40 +120,25 @@ function compartilharWhatsApp(tituloCode, textoCode) {
     window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
-// NOVA SOLUÇÃO DEFINITIVA DO PDF (Usando PDFMake)
+// PDF COM PDFMAKE
 window.gerarPDFManual = function(tituloCode, textoCode) {
     const titulo = decodeURIComponent(tituloCode);
     const texto = decodeURIComponent(textoCode);
 
-    // O PDFMake constrói o PDF diretamente via JSON, ignorando o HTML e a tela
     const docDefinition = {
         content: [
             { text: titulo, style: 'header' },
-            // Linha divisória
             { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 1, lineColor: '#cccccc' }] },
-            { text: '\n\n' }, // Espaço
+            { text: '\n\n' },
             { text: texto, style: 'body' }
         ],
         styles: {
-            header: {
-                fontSize: 22,
-                bold: true,
-                color: '#d35400',
-                alignment: 'center',
-                margin: [0, 0, 0, 10]
-            },
-            body: {
-                fontSize: 12,
-                lineHeight: 1.5,
-                color: '#333333'
-            }
+            header: { fontSize: 22, bold: true, color: '#d35400', alignment: 'center', margin: [0, 0, 0, 10] },
+            body: { fontSize: 12, lineHeight: 1.5, color: '#333333' }
         },
-        defaultStyle: {
-            font: 'Roboto'
-        }
+        defaultStyle: { font: 'Roboto' }
     };
 
-    // Gera e baixa o arquivo instantaneamente
     pdfMake.createPdf(docDefinition).download(`${titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
 }
 
@@ -157,10 +168,12 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         
         const dados = await response.json();
 
+        // NOVO: Adiciona o MEU_USER_ID na hora de salvar a receita no banco
         await supabaseClient.from('saved_recipes').insert([{
             title: dados.titulo,
             instructions: dados.receita,
-            image_url: dados.imagem
+            image_url: dados.imagem,
+            user_id: MEU_USER_ID // <--- O "RG" da pessoa sendo salvo
         }]);
         await supabaseClient.rpc('increment_recipe_counter');
 
