@@ -2,13 +2,13 @@
 const supabaseUrl = 'https://nsatdewodscygmftaric.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zYXRkZXdvZHNjeWdtZnRhcmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDI1MDMsImV4cCI6MjA5MzQ3ODUwM30.6fiBar5NNZQe1Pa3j6DGakfBbjRBrbDoqtVEyyI9WRE';
 
-// Alterado para 'supabaseClient' para evitar conflito com a biblioteca global
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
-
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
 
-// Inicialização
+// Variável global para armazenar os dados da última receita gerada
+let ultimaReceitaGerada = null;
+
 async function init() {
     carregarContador();
     carregarSalvos();
@@ -19,7 +19,6 @@ async function carregarContador() {
     if (data) contadorElement.innerText = data.total_recipes_generated;
 }
 
-// Escuta mudanças no contador em tempo real usando o novo nome da variável
 supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
@@ -29,7 +28,7 @@ async function carregarSalvos() {
     if (data) {
         listaSalvos.innerHTML = data.map(r => `
             <div class="recipe-card">
-                <img src="${r.image_url || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?q=80&w=500'}" alt="${r.title}">
+                <img src="${r.image_url}" alt="${r.title}">
                 <div class="recipe-info">
                     <h4>${r.title}</h4>
                     <p style="font-size: 0.8rem; color: #777;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
@@ -77,30 +76,39 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         });
 
         const dados = await response.json();
+        ultimaReceitaGerada = dados; // Salva na global para o botão salvar usar
         
         document.getElementById('titulo-receita').innerText = dados.titulo;
         document.getElementById('conteudo-receita').innerText = dados.receita;
-        document.getElementById('imagem-container').innerHTML = dados.imagem ? `<img src="${dados.imagem}" style="width:100%; border-radius:15px; margin:20px 0;">` : '';
+        document.getElementById('imagem-container').innerHTML = `<img src="${dados.imagem}" style="width:100%; border-radius:15px; margin:20px 0;">`;
         document.getElementById('resultado-receita').classList.remove('hidden');
 
         document.getElementById('btn-whatsapp').onclick = () => compartilharWhatsApp(encodeURIComponent(dados.titulo), encodeURIComponent(dados.receita));
-        
-        document.getElementById('btn-salvar').onclick = async () => {
-            await supabaseClient.from('saved_recipes').insert([{
-                title: dados.titulo,
-                instructions: dados.receita,
-                image_url: dados.imagem
-            }]);
-            alert("Receita salva!");
-            carregarSalvos();
-        };
 
-        await supabaseClient.rpc('increment_recipe_counter');
     } catch (e) {
         alert("Erro ao conectar com a cozinha.");
     } finally {
         btn.innerText = "Criar Minha Receita";
         btn.disabled = false;
+    }
+});
+
+// Botão Salvar Receita
+document.getElementById('btn-salvar').addEventListener('click', async () => {
+    if (!ultimaReceitaGerada) return alert("Gere uma receita primeiro!");
+
+    try {
+        await supabaseClient.from('saved_recipes').insert([{
+            title: ultimaReceitaGerada.titulo,
+            instructions: ultimaReceitaGerada.receita,
+            image_url: ultimaReceitaGerada.imagem
+        }]);
+        
+        await supabaseClient.rpc('increment_recipe_counter');
+        alert("Receita salva com sucesso!");
+        carregarSalvos();
+    } catch (error) {
+        alert("Erro ao salvar no banco de dados.");
     }
 });
 
