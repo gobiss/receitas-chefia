@@ -101,20 +101,14 @@ window.gerarPDFManual = function(tituloCode, textoCode) {
     const titulo = decodeURIComponent(tituloCode);
     const texto = decodeURIComponent(textoCode);
 
-    // Cria um elemento temporário na tela (invisível)
-    const tempDiv = document.createElement('div');
-    tempDiv.style.padding = '40px';
-    tempDiv.style.fontFamily = 'Arial, sans-serif';
-    tempDiv.style.color = '#000';
-    tempDiv.style.background = '#fff';
-    tempDiv.innerHTML = `
-        <h1 style="color: #d35400; text-align: center; margin-bottom: 20px;">${titulo}</h1>
-        <hr style="border: 1px solid #ddd; margin-bottom: 30px;">
-        <p style="white-space: pre-wrap; line-height: 1.6; font-size: 14px;">${texto}</p>
+    // Criamos o layout inteiro em uma variável de texto
+    const htmlContent = `
+        <div style="padding: 20px; font-family: Helvetica, Arial, sans-serif; color: #333; background: #fff;">
+            <h1 style="color: #d35400; text-align: center; margin-bottom: 15px;">${titulo}</h1>
+            <hr style="border: 1px solid #ccc; margin-bottom: 25px;">
+            <p style="white-space: pre-wrap; line-height: 1.6; font-size: 14px;">${texto}</p>
+        </div>
     `;
-    
-    // Anexa ao body temporariamente para o html2pdf conseguir renderizar
-    document.body.appendChild(tempDiv);
 
     const opt = {
         margin:       15,
@@ -124,10 +118,8 @@ window.gerarPDFManual = function(tituloCode, textoCode) {
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    html2pdf().set(opt).from(tempDiv).save().then(() => {
-        // Limpa o elemento temporário da tela
-        document.body.removeChild(tempDiv);
-    });
+    // Mandamos o html2pdf ler a string diretamente
+    html2pdf().set(opt).from(htmlContent).save();
 }
 
 // --- 4. GERAÇÃO MÁGICA COM AUTO-SAVE ---
