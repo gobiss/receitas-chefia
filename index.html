@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receitas ChefIA | Inteligência Gastronômica</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- CAMADA 1: HOME -->
+    <header class="layer hero-layer">
+        <div class="overlay"></div>
+        <div class="content">
+            <div class="contador-badge">👨‍🍳 <span id="numero-receitas">0</span> Receitas Geradas</div>
+            <h1>Receitas ChefIA</h1>
+            <p>A inteligência artificial que transforma sua geladeira em um restaurante 5 estrelas.</p>
+            <a href="#gerador" class="btn-main">Começar a Cozinhar</a>
+        </div>
+    </header>
+
+    <!-- CAMADA 2: QUEM SOMOS -->
+    <section id="quem-somos" class="layer about-layer">
+        <div class="overlay"></div>
+        <div class="content">
+            <h2>Nossa Missão</h2>
+            <p>Unimos tecnologia de ponta e alta gastronomia para que você crie pratos extraordinários com o que tem em casa.</p>
+            <a href="https://instagram.com/receitasdochefia" class="btn-insta" target="_blank">Nosso Instagram</a>
+        </div>
+    </section>
+
+    <!-- CAMADA 3: CONFIGURAÇÕES E GERAÇÃO -->
+    <section id="gerador" class="layer config-layer">
+        <div class="glass-card">
+            <h2>Configurações do Menu</h2>
+            <div class="input-grid">
+                <div class="input-group full">
+                    <label>Ingredientes:</label>
+                    <textarea id="ingredientes" placeholder="Ex: Salmão, aspargos, limão..."></textarea>
+                </div>
+                <div class="input-group">
+                    <label>Nível:</label>
+                    <select id="nivel">
+                        <option value="simples">Prático</option>
+                        <option value="profissional">Profissional</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Idioma:</label>
+                    <select id="idioma">
+                        <option value="Português">Português 🇧🇷</option>
+                        <option value="Inglês">Inglês 🇺🇸</option>
+                        <option value="Espanhol">Espanhol 🇪🇸</option>
+                        <option value="Francês">Francês 🇫🇷</option>
+                        <option value="Italiano">Italiano 🇮🇹</option>
+                    </select>
+                </div>
+                <button id="btn-gerar" class="full">Criar Minha Receita</button>
+            </div>
+
+            <div id="resultado-receita" class="hidden">
+                <div id="pdf-content">
+                    <h2 id="titulo-receita"></h2>
+                    <div id="imagem-container"></div>
+                    <div id="conteudo-receita"></div>
+                </div>
+                <div class="botoes-acao">
+                    <button id="btn-whatsapp" class="btn-wpp">WhatsApp</button>
+                    <button id="btn-pdf" class="btn-pdf">PDF</button>
+                    <button id="btn-salvar" class="btn-save">Salvar Receita</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CAMADA 4: RECEITAS SALVAS -->
+    <section id="salvos" class="layer saved-layer">
+        <div class="overlay"></div>
+        <div class="content full-width">
+            <h2>Suas Criações</h2>
+            <div id="lista-salvos" class="saved-grid">
+                <!-- Cards de receitas salvas entrarão aqui -->
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>&copy; 2026 Receitas ChefIA - São José dos Campos. Todos os direitos reservados.</p>
+        <a href="https://instagram.com/receitasdochefia" target="_blank">Instagram oficial</a>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
