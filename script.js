@@ -94,27 +94,48 @@ function compartilharWhatsApp(tituloCode, textoCode) {
     window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
+// CORREÇÃO DEFINITIVA DO PDF
 window.gerarPDFManual = function(tituloCode, textoCode) {
     const titulo = decodeURIComponent(tituloCode);
     const texto = decodeURIComponent(textoCode);
 
-    const htmlContent = `
-        <div style="padding: 20px; font-family: Helvetica, Arial, sans-serif; color: #333; background: #fff;">
-            <h1 style="color: #d35400; text-align: center; margin-bottom: 15px;">${titulo}</h1>
-            <hr style="border: 1px solid #ccc; margin-bottom: 25px;">
-            <p style="white-space: pre-wrap; line-height: 1.6; font-size: 14px;">${texto}</p>
-        </div>
+    // 1. Criamos um elemento DOM real e físico
+    const element = document.createElement('div');
+    
+    // 2. Damos dimensões estritas para a câmera do html2canvas conseguir focar
+    element.style.width = '800px';
+    element.style.padding = '40px';
+    element.style.fontFamily = 'Helvetica, Arial, sans-serif';
+    element.style.color = '#333';
+    element.style.backgroundColor = '#ffffff'; // Força o fundo branco
+    
+    // 3. Montamos o conteúdo
+    element.innerHTML = `
+        <h1 style="color: #d35400; text-align: center; margin-bottom: 20px;">${titulo}</h1>
+        <hr style="border: 1px solid #ccc; margin-bottom: 30px;">
+        <p style="white-space: pre-wrap; line-height: 1.6; font-size: 16px;">${texto}</p>
     `;
+
+    // 4. Escondemos o elemento fora da tela para não bugar o visual do site
+    element.style.position = 'absolute';
+    element.style.left = '-9999px';
+    element.style.top = '-9999px';
+    
+    // 5. Inserimos fisicamente na página
+    document.body.appendChild(element);
 
     const opt = {
         margin:       15,
         filename:     `${titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 }, // Força a largura da janela de captura
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    html2pdf().set(opt).from(htmlContent).save();
+    // 6. Geramos o PDF a partir do elemento físico, e em seguida apagamos ele
+    html2pdf().set(opt).from(element).save().then(() => {
+        document.body.removeChild(element);
+    });
 }
 
 // --- 4. GERAÇÃO MÁGICA COM AUTO-SAVE ---
