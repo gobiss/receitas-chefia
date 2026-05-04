@@ -1,6 +1,9 @@
+// --- 1. CONFIGURAÇÃO DO SUPABASE ---
 const supabaseUrl = 'https://nsatdewodscygmftaric.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zYXRkZXdvZHNjeWdtZnRhcmljIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MDI1MDMsImV4cCI6MjA5MzQ3ODUwM30.6fiBar5NNZQe1Pa3j6DGakfBbjRBrbDoqtVEyyI9WRE';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+// Alterado para 'supabaseClient' para evitar conflito com a biblioteca global
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
@@ -12,17 +15,17 @@ async function init() {
 }
 
 async function carregarContador() {
-    const { data } = await supabase.from('global_stats').select('total_recipes_generated').eq('id', 1).single();
+    const { data } = await supabaseClient.from('global_stats').select('total_recipes_generated').eq('id', 1).single();
     if (data) contadorElement.innerText = data.total_recipes_generated;
 }
 
-// Escuta mudanças no contador em tempo real
-supabase.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
+// Escuta mudanças no contador em tempo real usando o novo nome da variável
+supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
 async function carregarSalvos() {
-    const { data } = await supabase.from('saved_recipes').select('*').order('created_at', { ascending: false });
+    const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
     if (data) {
         listaSalvos.innerHTML = data.map(r => `
             <div class="recipe-card">
@@ -83,7 +86,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         document.getElementById('btn-whatsapp').onclick = () => compartilharWhatsApp(encodeURIComponent(dados.titulo), encodeURIComponent(dados.receita));
         
         document.getElementById('btn-salvar').onclick = async () => {
-            await supabase.from('saved_recipes').insert([{
+            await supabaseClient.from('saved_recipes').insert([{
                 title: dados.titulo,
                 instructions: dados.receita,
                 image_url: dados.imagem
@@ -92,7 +95,7 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
             carregarSalvos();
         };
 
-        await supabase.rpc('increment_recipe_counter');
+        await supabaseClient.rpc('increment_recipe_counter');
     } catch (e) {
         alert("Erro ao conectar com a cozinha.");
     } finally {
