@@ -10,35 +10,45 @@ const listaSalvos = document.getElementById('lista-salvos');
 let ultimaReceitaGerada = null;
 
 async function init() {
+    console.log("Sistema iniciado...");
     carregarContador();
     carregarSalvos();
 }
 
 async function carregarContador() {
-    const { data } = await supabaseClient.from('global_stats').select('total_recipes_generated').eq('id', 1).single();
-    if (data) contadorElement.innerText = data.total_recipes_generated;
+    try {
+        const { data } = await supabaseClient.from('global_stats').select('total_recipes_generated').eq('id', 1).single();
+        if (data) contadorElement.innerText = data.total_recipes_generated;
+    } catch (err) {
+        console.error("Erro ao carregar contador:", err);
+    }
 }
 
+// Atualização em tempo real
 supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
 async function carregarSalvos() {
-    const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
-    if (data) {
-        listaSalvos.innerHTML = data.map(r => `
-            <div class="recipe-card">
-                <img src="${r.image_url}" alt="${r.title}">
-                <div class="recipe-info">
-                    <h4>${r.title}</h4>
-                    <p style="font-size: 0.8rem; color: #777;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
+    try {
+        const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
+        if (data) {
+            listaSalvos.innerHTML = data.map(r => `
+                <div class="recipe-card">
+                    <img src="${r.image_url}" alt="${r.title}">
+                    <div class="recipe-info">
+                        <h4>${r.title}</h4>
+                        <p style="font-size: 0.8rem; color: #777;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div class="recipe-actions">
+                        <button onclick="compartilharWhatsApp('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-wpp">WhatsApp</button>
+                        <button onclick="gerarPDFManual('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-pdf">PDF</button>
+                    </div>
                 </div>
-                <div class="recipe-actions">
-                    <button onclick="compartilharWhatsApp('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-wpp">WhatsApp</button>
-                    <button onclick="gerarPDFManual('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-pdf">PDF</button>
-                </div>
-            </div>
-        `).join('');
+            `).join('');
+        }
+    } catch (err) {
+        console.error("Erro ao carregar salvos:", err);
     }
 }
 
@@ -55,28 +65,44 @@ function gerarPDFManual(titulo, texto) {
     html2pdf().from(tempDiv).save(`${decodeURIComponent(titulo)}.pdf`);
 }
 
-// Lógica de Geração
+// --- LÓGICA DE GERAÇÃO (Onde estava o problema) ---
 document.getElementById('btn-gerar').addEventListener('click', async () => {
+    console.log("Clique detectado no botão 'Criar Minha Receita'");
+    
     const btn = document.getElementById('btn-gerar');
     const ingredientes = document.getElementById('ingredientes').value;
-    if(!ingredientes) return alert("Ingredientes necessários!");
+    const nivel = document.getElementById('nivel').value;
+    const idioma = document.getElementById('idioma').value;
+
+    if(!ingredientes) {
+        console.warn("Tentativa de gerar sem ingredientes.");
+        return alert("Ingredientes necessários!");
+    }
 
     btn.innerText = "Cozinhando...";
     btn.disabled = true;
 
     try {
+        console.log("Enviando requisição para a API /api/gerar...");
+        
+        // Caminho relativo para funcionar no Vercel
         const response = await fetch('/api/gerar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                ingredientes, 
-                nivel: document.getElementById('nivel').value,
-                idioma: document.getElementById('idioma').value 
-            })
+            body: JSON.stringify({ ingredientes, nivel, idioma })
         });
 
+        console.log("Status da resposta da API:", response.status);
+
+        if (!response.ok) {
+            const erroTexto = await response.text();
+            throw new Error(`Erro na API (${response.status}): ${erroTexto}`);
+        }
+
         const dados = await response.json();
-        ultimaReceitaGerada = dados; // Salva na global para o botão salvar usar
+        console.log("Dados recebidos com sucesso:", dados);
+
+        ultimaReceitaGerada = dados;
         
         document.getElementById('titulo-receita').innerText = dados.titulo;
         document.getElementById('conteudo-receita').innerText = dados.receita;
@@ -86,7 +112,8 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         document.getElementById('btn-whatsapp').onclick = () => compartilharWhatsApp(encodeURIComponent(dados.titulo), encodeURIComponent(dados.receita));
 
     } catch (e) {
-        alert("Erro ao conectar com a cozinha.");
+        console.error("ERRO NO PROCESSO DE GERAÇÃO:", e);
+        alert("Erro ao conectar com a cozinha: " + e.message);
     } finally {
         btn.innerText = "Criar Minha Receita";
         btn.disabled = false;
@@ -95,19 +122,30 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
 
 // Botão Salvar Receita
 document.getElementById('btn-salvar').addEventListener('click', async () => {
-    if (!ultimaReceitaGerada) return alert("Gere uma receita primeiro!");
+    console.log("Botão Salvar clicado.");
+    
+    if (!ultimaReceitaGerada) {
+        console.warn("Tentativa de salvar sem receita gerada.");
+        return alert("Gere uma receita primeiro!");
+    }
 
     try {
-        await supabaseClient.from('saved_recipes').insert([{
+        console.log("Salvando no Supabase...");
+        const { error } = await supabaseClient.from('saved_recipes').insert([{
             title: ultimaReceitaGerada.titulo,
             instructions: ultimaReceitaGerada.receita,
             image_url: ultimaReceitaGerada.imagem
         }]);
+
+        if (error) throw error;
         
+        console.log("Incrementando contador global...");
         await supabaseClient.rpc('increment_recipe_counter');
+        
         alert("Receita salva com sucesso!");
         carregarSalvos();
     } catch (error) {
+        console.error("Erro ao salvar:", error);
         alert("Erro ao salvar no banco de dados.");
     }
 });
@@ -117,4 +155,5 @@ document.getElementById('btn-pdf').addEventListener('click', () => {
     html2pdf().from(element).save();
 });
 
+// Inicia tudo
 init();
