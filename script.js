@@ -6,8 +6,10 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
 
+// Função de segurança para evitar que o inglês (apóstrofos) quebre os botões HTML
+const safeEncode = (str) => encodeURIComponent(str).replace(/'/g, "%27");
+
 async function init() {
-    console.log("Sistema iniciado com Auto-Save, Delete e Modal...");
     carregarContador();
     carregarSalvos();
 }
@@ -21,12 +23,11 @@ async function carregarContador() {
     }
 }
 
-// Atualização em tempo real do contador
 supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
-// --- 2. CARREGAR E EXIBIR RECEITAS (COM BOTÕES NOVOS) ---
+// --- 2. CARREGAR E EXIBIR RECEITAS ---
 async function carregarSalvos() {
     try {
         const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
@@ -39,9 +40,9 @@ async function carregarSalvos() {
                         <p style="font-size: 0.8rem; color: #777; margin-bottom: 15px;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
                         
                         <div class="recipe-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <button onclick="abrirModalReceita('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}', '${r.image_url}')" style="background: #e67e22; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">Ver Receita</button>
-                            <button onclick="compartilharWhatsApp('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" style="background: #25D366; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">WhatsApp</button>
-                            <button onclick="gerarPDFManual('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" style="background: #e74c3c; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">PDF</button>
+                            <button onclick="abrirModalReceita('${safeEncode(r.title)}', '${safeEncode(r.instructions)}', '${r.image_url}')" style="background: #e67e22; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">Ver Receita</button>
+                            <button onclick="compartilharWhatsApp('${safeEncode(r.title)}', '${safeEncode(r.instructions)}')" style="background: #25D366; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">WhatsApp</button>
+                            <button onclick="gerarPDFManual('${safeEncode(r.title)}', '${safeEncode(r.instructions)}')" style="background: #e74c3c; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">PDF</button>
                             <button onclick="deletarReceita('${r.id}')" style="background: #333; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">Apagar</button>
                         </div>
                     </div>
@@ -54,20 +55,17 @@ async function carregarSalvos() {
 }
 
 // --- 3. FUNÇÕES DE CRUD E UI ---
-
-// Apagar Receita
 window.deletarReceita = async function(id) {
     if(confirm("Tem certeza que deseja apagar esta receita da sua galeria?")) {
         try {
             await supabaseClient.from('saved_recipes').delete().eq('id', id);
-            carregarSalvos(); // Recarrega a lista após apagar
+            carregarSalvos(); 
         } catch (err) {
             alert("Erro ao apagar receita.");
         }
     }
 }
 
-// Modal Limpo e Formatado para "Ver Receita"
 window.abrirModalReceita = function(tituloCode, textoCode, imgUrl) {
     const titulo = decodeURIComponent(tituloCode);
     const texto = decodeURIComponent(textoCode);
@@ -91,17 +89,15 @@ window.abrirModalReceita = function(tituloCode, textoCode, imgUrl) {
     modal.style.display = 'flex';
 }
 
-function compartilharWhatsApp(titulo, texto) {
-    const msg = encodeURIComponent(`🍴 *${decodeURIComponent(titulo)}*\n\n${decodeURIComponent(texto)}`);
+function compartilharWhatsApp(tituloCode, textoCode) {
+    const msg = encodeURIComponent(`🍴 *${decodeURIComponent(tituloCode)}*\n\n${decodeURIComponent(textoCode)}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
-// CORREÇÃO DO PDF: Agora o html2pdf consegue ler e renderizar o texto
 window.gerarPDFManual = function(tituloCode, textoCode) {
     const titulo = decodeURIComponent(tituloCode);
     const texto = decodeURIComponent(textoCode);
 
-    // Criamos o layout inteiro em uma variável de texto
     const htmlContent = `
         <div style="padding: 20px; font-family: Helvetica, Arial, sans-serif; color: #333; background: #fff;">
             <h1 style="color: #d35400; text-align: center; margin-bottom: 15px;">${titulo}</h1>
@@ -118,7 +114,6 @@ window.gerarPDFManual = function(tituloCode, textoCode) {
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    // Mandamos o html2pdf ler a string diretamente
     html2pdf().set(opt).from(htmlContent).save();
 }
 
@@ -141,10 +136,13 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
             body: JSON.stringify({ ingredientes, nivel, idioma })
         });
 
-        if (!response.ok) throw new Error("Falha na API");
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.erro || "Falha na API");
+        }
+        
         const dados = await response.json();
 
-        // 1. AUTO-SAVE IMEDIATO NO SUPABASE
         await supabaseClient.from('saved_recipes').insert([{
             title: dados.titulo,
             instructions: dados.receita,
@@ -152,26 +150,22 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         }]);
         await supabaseClient.rpc('increment_recipe_counter');
 
-        // 2. RECARREGA A GALERIA
         await carregarSalvos();
 
-        // 3. SCROLL SUAVE PARA "SUAS CRIAÇÕES"
         const sectionSalvos = document.getElementById('lista-salvos');
         if (sectionSalvos) {
             sectionSalvos.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
-        // Limpa o campo de ingredientes para a próxima
         document.getElementById('ingredientes').value = '';
 
     } catch (e) {
         console.error(e);
-        alert("Erro ao conectar com a cozinha.");
+        alert("Erro ao conectar com a cozinha: A receita demorou demais para ficar pronta ou ocorreu uma falha.");
     } finally {
         btn.innerText = "Criar Minha Receita";
         btn.disabled = false;
     }
 });
 
-// Inicializa a aplicação
 init();

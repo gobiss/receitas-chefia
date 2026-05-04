@@ -1,4 +1,6 @@
-// Build Final Supremo - Atualizando o Modelo de IA para a versão 2.5
+// Aumenta o tempo limite do Vercel de 10s para 60s (Evita o erro no modo Profissional)
+export const maxDuration = 60;
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido' });
 
@@ -7,10 +9,11 @@ export default async function handler(req, res) {
     const UNSPLASH_KEY = process.env.UNSPLASH_API_KEY;
 
     try {
+        // Prompt otimizado para ser processado mais rápido pelo Gemini
         const prompt = `Crie uma receita em ${idioma} com: ${ingredientes}. Nível: ${nivel}. 
+        Seja prático e direto nas instruções para economizar tempo.
         Retorne APENAS um objeto JSON puro com as chaves: "titulo" e "receita".`;
 
-        // MUDANÇA ABSOLUTA: O modelo 1.5 foi desligado. Chamando o novo gemini-2.5-flash
         const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -21,21 +24,18 @@ export default async function handler(req, res) {
 
         const geminiData = await geminiResponse.json();
 
-        // Tratamento de erro nativo do Gemini
         if (geminiData.error) {
             return res.status(500).json({ erro: `Erro interno da API: ${geminiData.error.message}` });
         }
 
         let textoResposta = geminiData.candidates[0].content.parts[0].text;
         
-        // Isolando o JSON caso a IA envie texto extra
         const inicioJson = textoResposta.indexOf('{');
         const fimJson = textoResposta.lastIndexOf('}') + 1;
         const jsonPuro = textoResposta.substring(inicioJson, fimJson);
         
         const dadosReceita = JSON.parse(jsonPuro);
 
-        // Imagem Unsplash
         const unsplashRes = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(dadosReceita.titulo)}&client_id=${UNSPLASH_KEY}&per_page=1`);
         const unsplashData = await unsplashRes.json();
         const imagemUrl = unsplashData.results?.[0]?.urls?.regular || 'https://images.unsplash.com/photo-1495521821757-a1efb6729352?q=80&w=800';
