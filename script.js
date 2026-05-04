@@ -6,11 +6,8 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
 
-// Variável global para armazenar os dados da última receita gerada
-let ultimaReceitaGerada = null;
-
 async function init() {
-    console.log("Sistema iniciado...");
+    console.log("Sistema iniciado com Auto-Save, Delete e Modal...");
     carregarContador();
     carregarSalvos();
 }
@@ -24,25 +21,29 @@ async function carregarContador() {
     }
 }
 
-// Atualização em tempo real
+// Atualização em tempo real do contador
 supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'global_stats' }, payload => {
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
+// --- 2. CARREGAR E EXIBIR RECEITAS (COM BOTÕES NOVOS) ---
 async function carregarSalvos() {
     try {
         const { data } = await supabaseClient.from('saved_recipes').select('*').order('created_at', { ascending: false });
         if (data) {
             listaSalvos.innerHTML = data.map(r => `
-                <div class="recipe-card">
-                    <img src="${r.image_url}" alt="${r.title}">
-                    <div class="recipe-info">
-                        <h4>${r.title}</h4>
-                        <p style="font-size: 0.8rem; color: #777;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
-                    </div>
-                    <div class="recipe-actions">
-                        <button onclick="compartilharWhatsApp('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-wpp">WhatsApp</button>
-                        <button onclick="gerarPDFManual('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" class="btn-pdf">PDF</button>
+                <div class="recipe-card" style="border: 1px solid #ddd; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <img src="${r.image_url}" alt="${r.title}" style="width: 100%; height: 200px; object-fit: cover;">
+                    <div class="recipe-info" style="padding: 15px;">
+                        <h4 style="margin: 0 0 10px 0; color: #d35400;">${r.title}</h4>
+                        <p style="font-size: 0.8rem; color: #777; margin-bottom: 15px;">Gerada em: ${new Date(r.created_at).toLocaleDateString()}</p>
+                        
+                        <div class="recipe-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button onclick="abrirModalReceita('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}', '${r.image_url}')" style="background: #e67e22; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">Ver Receita</button>
+                            <button onclick="compartilharWhatsApp('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" style="background: #25D366; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">WhatsApp</button>
+                            <button onclick="gerarPDFManual('${encodeURIComponent(r.title)}', '${encodeURIComponent(r.instructions)}')" style="background: #e74c3c; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">PDF</button>
+                            <button onclick="deletarReceita('${r.id}')" style="background: #333; color: #fff; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; flex: 1;">Apagar</button>
+                        </div>
                     </div>
                 </div>
             `).join('');
@@ -52,108 +53,133 @@ async function carregarSalvos() {
     }
 }
 
+// --- 3. FUNÇÕES DE CRUD E UI ---
+
+// Apagar Receita
+window.deletarReceita = async function(id) {
+    if(confirm("Tem certeza que deseja apagar esta receita da sua galeria?")) {
+        try {
+            await supabaseClient.from('saved_recipes').delete().eq('id', id);
+            carregarSalvos(); // Recarrega a lista após apagar
+        } catch (err) {
+            alert("Erro ao apagar receita.");
+        }
+    }
+}
+
+// Modal Limpo e Formatado para "Ver Receita"
+window.abrirModalReceita = function(tituloCode, textoCode, imgUrl) {
+    const titulo = decodeURIComponent(tituloCode);
+    const texto = decodeURIComponent(textoCode);
+
+    let modal = document.getElementById('receita-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'receita-modal';
+        modal.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:9999; padding:20px;";
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div style="background:#fff; max-width:700px; width:100%; max-height:85vh; overflow-y:auto; border-radius:15px; padding:30px; position:relative; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+            <button onclick="document.getElementById('receita-modal').style.display='none'" style="position:absolute; top:15px; right:15px; background:#e74c3c; color:white; border:none; border-radius:50%; width:35px; height:35px; cursor:pointer; font-weight:bold; font-size: 16px;">X</button>
+            <img src="${imgUrl}" style="width:100%; height:300px; object-fit:cover; border-radius:10px; margin-bottom:20px;">
+            <h2 style="color:#d35400; margin-bottom:20px; font-size: 28px;">${titulo}</h2>
+            <p style="white-space: pre-wrap; color:#444; line-height:1.8; font-size: 16px; font-family: sans-serif;">${texto}</p>
+        </div>
+    `;
+    modal.style.display = 'flex';
+}
+
 function compartilharWhatsApp(titulo, texto) {
     const msg = encodeURIComponent(`🍴 *${decodeURIComponent(titulo)}*\n\n${decodeURIComponent(texto)}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
-function gerarPDFManual(titulo, texto) {
+// CORREÇÃO DO PDF: Agora o html2pdf consegue ler e renderizar o texto
+window.gerarPDFManual = function(tituloCode, textoCode) {
+    const titulo = decodeURIComponent(tituloCode);
+    const texto = decodeURIComponent(textoCode);
+
+    // Cria um elemento temporário na tela (invisível)
     const tempDiv = document.createElement('div');
     tempDiv.style.padding = '40px';
-    tempDiv.style.color = '#333';
-    tempDiv.innerHTML = `<h1>${decodeURIComponent(titulo)}</h1><hr><p style="white-space: pre-wrap;">${decodeURIComponent(texto)}</p>`;
-    html2pdf().from(tempDiv).save(`${decodeURIComponent(titulo)}.pdf`);
+    tempDiv.style.fontFamily = 'Arial, sans-serif';
+    tempDiv.style.color = '#000';
+    tempDiv.style.background = '#fff';
+    tempDiv.innerHTML = `
+        <h1 style="color: #d35400; text-align: center; margin-bottom: 20px;">${titulo}</h1>
+        <hr style="border: 1px solid #ddd; margin-bottom: 30px;">
+        <p style="white-space: pre-wrap; line-height: 1.6; font-size: 14px;">${texto}</p>
+    `;
+    
+    // Anexa ao body temporariamente para o html2pdf conseguir renderizar
+    document.body.appendChild(tempDiv);
+
+    const opt = {
+        margin:       15,
+        filename:     `${titulo.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    html2pdf().set(opt).from(tempDiv).save().then(() => {
+        // Limpa o elemento temporário da tela
+        document.body.removeChild(tempDiv);
+    });
 }
 
-// --- LÓGICA DE GERAÇÃO (Onde estava o problema) ---
+// --- 4. GERAÇÃO MÁGICA COM AUTO-SAVE ---
 document.getElementById('btn-gerar').addEventListener('click', async () => {
-    console.log("Clique detectado no botão 'Criar Minha Receita'");
-    
     const btn = document.getElementById('btn-gerar');
     const ingredientes = document.getElementById('ingredientes').value;
     const nivel = document.getElementById('nivel').value;
     const idioma = document.getElementById('idioma').value;
 
-    if(!ingredientes) {
-        console.warn("Tentativa de gerar sem ingredientes.");
-        return alert("Ingredientes necessários!");
-    }
+    if(!ingredientes) return alert("Ingredientes necessários!");
 
     btn.innerText = "Cozinhando...";
     btn.disabled = true;
 
     try {
-        console.log("Enviando requisição para a API /api/gerar...");
-        
-        // Caminho relativo para funcionar no Vercel
         const response = await fetch('/api/gerar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ingredientes, nivel, idioma })
         });
 
-        console.log("Status da resposta da API:", response.status);
-
-        if (!response.ok) {
-            const erroTexto = await response.text();
-            throw new Error(`Erro na API (${response.status}): ${erroTexto}`);
-        }
-
+        if (!response.ok) throw new Error("Falha na API");
         const dados = await response.json();
-        console.log("Dados recebidos com sucesso:", dados);
 
-        ultimaReceitaGerada = dados;
+        // 1. AUTO-SAVE IMEDIATO NO SUPABASE
+        await supabaseClient.from('saved_recipes').insert([{
+            title: dados.titulo,
+            instructions: dados.receita,
+            image_url: dados.imagem
+        }]);
+        await supabaseClient.rpc('increment_recipe_counter');
+
+        // 2. RECARREGA A GALERIA
+        await carregarSalvos();
+
+        // 3. SCROLL SUAVE PARA "SUAS CRIAÇÕES"
+        const sectionSalvos = document.getElementById('lista-salvos');
+        if (sectionSalvos) {
+            sectionSalvos.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         
-        document.getElementById('titulo-receita').innerText = dados.titulo;
-        document.getElementById('conteudo-receita').innerText = dados.receita;
-        document.getElementById('imagem-container').innerHTML = `<img src="${dados.imagem}" style="width:100%; border-radius:15px; margin:20px 0;">`;
-        document.getElementById('resultado-receita').classList.remove('hidden');
-
-        document.getElementById('btn-whatsapp').onclick = () => compartilharWhatsApp(encodeURIComponent(dados.titulo), encodeURIComponent(dados.receita));
+        // Limpa o campo de ingredientes para a próxima
+        document.getElementById('ingredientes').value = '';
 
     } catch (e) {
-        console.error("ERRO NO PROCESSO DE GERAÇÃO:", e);
-        alert("Erro ao conectar com a cozinha: " + e.message);
+        console.error(e);
+        alert("Erro ao conectar com a cozinha.");
     } finally {
         btn.innerText = "Criar Minha Receita";
         btn.disabled = false;
     }
 });
 
-// Botão Salvar Receita
-document.getElementById('btn-salvar').addEventListener('click', async () => {
-    console.log("Botão Salvar clicado.");
-    
-    if (!ultimaReceitaGerada) {
-        console.warn("Tentativa de salvar sem receita gerada.");
-        return alert("Gere uma receita primeiro!");
-    }
-
-    try {
-        console.log("Salvando no Supabase...");
-        const { error } = await supabaseClient.from('saved_recipes').insert([{
-            title: ultimaReceitaGerada.titulo,
-            instructions: ultimaReceitaGerada.receita,
-            image_url: ultimaReceitaGerada.imagem
-        }]);
-
-        if (error) throw error;
-        
-        console.log("Incrementando contador global...");
-        await supabaseClient.rpc('increment_recipe_counter');
-        
-        alert("Receita salva com sucesso!");
-        carregarSalvos();
-    } catch (error) {
-        console.error("Erro ao salvar:", error);
-        alert("Erro ao salvar no banco de dados.");
-    }
-});
-
-document.getElementById('btn-pdf').addEventListener('click', () => {
-    const element = document.getElementById('pdf-content');
-    html2pdf().from(element).save();
-});
-
-// Inicia tudo
+// Inicializa a aplicação
 init();
