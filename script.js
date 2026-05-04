@@ -6,23 +6,39 @@ const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 const contadorElement = document.getElementById('numero-receitas');
 const listaSalvos = document.getElementById('lista-salvos');
 
-// --- SISTEMA DE IDENTIFICAÇÃO ANÔNIMA (NOVO) ---
-// Gera ou recupera um ID único para o aparelho do usuário usando LocalStorage
+// --- SISTEMA DE IDENTIFICAÇÃO ANÔNIMA ---
 function getUserId() {
     let id = localStorage.getItem('chefia_user_id');
     if (!id) {
-        // Se não tem ID, cria um novo (ex: user_k3j4b5n6_170000000)
         id = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         localStorage.setItem('chefia_user_id', id);
     }
     return id;
 }
 
-// Guarda o ID do celular atual nesta variável
 const MEU_USER_ID = getUserId();
-
-// Função de segurança para evitar que o inglês quebre botões
 const safeEncode = (str) => encodeURIComponent(str).replace(/'/g, "%27");
+
+// --- FUNÇÃO MÁGICA: FORMATA JSON QUEBRADO EM TEXTO BONITO ---
+function formatarTextoReceita(textoBruto) {
+    try {
+        // Tenta ler como JSON (se der certo, é porque a receita veio bugada e vamos consertar)
+        const obj = JSON.parse(textoBruto);
+        let formatado = "";
+        
+        if (obj.ingredientes) {
+            formatado += "🛒 Ingredientes:\n• " + (Array.isArray(obj.ingredientes) ? obj.ingredientes.join('\n• ') : obj.ingredientes) + "\n\n";
+        }
+        if (obj.instrucoes) {
+            formatado += "👨‍🍳 Instruções:\n" + (Array.isArray(obj.instrucoes) ? obj.instrucoes.join('\n\n') : obj.instrucoes);
+        }
+        
+        return formatado.trim() ? formatado : textoBruto;
+    } catch (e) {
+        // Se der erro no parse, significa que a receita já veio como texto certinho. Só retorna.
+        return textoBruto;
+    }
+}
 
 async function init() {
     carregarContador();
@@ -42,10 +58,9 @@ supabaseClient.channel('public:global_stats').on('postgres_changes', { event: 'U
     contadorElement.innerText = payload.new.total_recipes_generated;
 }).subscribe();
 
-// --- 2. CARREGAR E EXIBIR RECEITAS (AGORA PRIVADAS) ---
+// --- 2. CARREGAR E EXIBIR RECEITAS ---
 async function carregarSalvos() {
     try {
-        // NOVO: Puxa APENAS as receitas que têm o user_id igual ao do celular atual
         const { data } = await supabaseClient
             .from('saved_recipes')
             .select('*')
@@ -70,7 +85,6 @@ async function carregarSalvos() {
                 </div>
             `).join('');
             
-            // Se o usuário não tiver nenhuma receita, mostra uma mensagem legal
             if (data.length === 0) {
                 listaSalvos.innerHTML = `<p style="color: #fff; text-align: center; width: 100%; grid-column: 1 / -1;">Você ainda não salvou nenhuma receita. Que tal criar a primeira? 👨‍🍳</p>`;
             }
@@ -94,7 +108,8 @@ window.deletarReceita = async function(id) {
 
 window.abrirModalReceita = function(tituloCode, textoCode, imgUrl) {
     const titulo = decodeURIComponent(tituloCode);
-    const texto = decodeURIComponent(textoCode);
+    // Aplica a formatação mágica aqui!
+    const texto = formatarTextoReceita(decodeURIComponent(textoCode));
 
     let modal = document.getElementById('receita-modal');
     if (!modal) {
@@ -116,14 +131,19 @@ window.abrirModalReceita = function(tituloCode, textoCode, imgUrl) {
 }
 
 function compartilharWhatsApp(tituloCode, textoCode) {
-    const msg = encodeURIComponent(`🍴 *${decodeURIComponent(tituloCode)}*\n\n${decodeURIComponent(textoCode)}`);
+    const titulo = decodeURIComponent(tituloCode);
+    // Aplica a formatação mágica aqui também!
+    const texto = formatarTextoReceita(decodeURIComponent(textoCode));
+    
+    const msg = encodeURIComponent(`🍴 *${titulo}*\n\n${texto}`);
     window.open(`https://wa.me/?text=${msg}`, '_blank');
 }
 
 // PDF COM PDFMAKE
 window.gerarPDFManual = function(tituloCode, textoCode) {
     const titulo = decodeURIComponent(tituloCode);
-    const texto = decodeURIComponent(textoCode);
+    // Aplica a formatação mágica no PDF!
+    const texto = formatarTextoReceita(decodeURIComponent(textoCode));
 
     const docDefinition = {
         content: [
@@ -168,12 +188,11 @@ document.getElementById('btn-gerar').addEventListener('click', async () => {
         
         const dados = await response.json();
 
-        // NOVO: Adiciona o MEU_USER_ID na hora de salvar a receita no banco
         await supabaseClient.from('saved_recipes').insert([{
             title: dados.titulo,
             instructions: dados.receita,
             image_url: dados.imagem,
-            user_id: MEU_USER_ID // <--- O "RG" da pessoa sendo salvo
+            user_id: MEU_USER_ID
         }]);
         await supabaseClient.rpc('increment_recipe_counter');
 
