@@ -1,4 +1,4 @@
-// Build Final - Versao Estavel v1 - Forcando o Vercel a atualizar
+// Build Final Supremo - Atualizando o Modelo de IA para a versão 2.5
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido' });
 
@@ -10,8 +10,8 @@ export default async function handler(req, res) {
         const prompt = `Crie uma receita em ${idioma} com: ${ingredientes}. Nível: ${nivel}. 
         Retorne APENAS um objeto JSON puro com as chaves: "titulo" e "receita".`;
 
-        // CHAMADA PARA A V1 ESTÁVEL
-        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+        // MUDANÇA ABSOLUTA: O modelo 1.5 foi desligado. Chamando o novo gemini-2.5-flash
+        const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
 
         let textoResposta = geminiData.candidates[0].content.parts[0].text;
         
-        // Isolando o JSON
+        // Isolando o JSON caso a IA envie texto extra
         const inicioJson = textoResposta.indexOf('{');
         const fimJson = textoResposta.lastIndexOf('}') + 1;
         const jsonPuro = textoResposta.substring(inicioJson, fimJson);
